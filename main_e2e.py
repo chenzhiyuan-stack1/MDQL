@@ -37,7 +37,7 @@ import onnxruntime as ort
 import sys
 
 hyperparameters = {
-    'meta-v14-id-gru-eta10-TD7-onlyzs-good33':     {'lr': 1e-5, 'eta': 10.0,  'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 10, 'num_epochs': 4000, 'gn': 10.0, 'top_k': 1},
+    'test':     {'lr': 1e-5, 'eta': 10.0,  'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 10, 'num_epochs': 4000, 'gn': 10.0, 'top_k': 1},
 }
 
 # hyperparameters from v14_iql.py
