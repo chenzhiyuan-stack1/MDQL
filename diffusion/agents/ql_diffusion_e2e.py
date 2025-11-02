@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from diffusion.utils.logger import logger
 
-from diffusion.agents.diffusion_id import Diffusion
+from diffusion.agents.diffusion_id_e2e import Diffusion
 from diffusion.agents.model import MLP
 from diffusion.agents.model import MLP_GRU, Meta_MLP_GRU, Meta_MLP_GRU_v1, Meta_MLP_GRU_select_feature
 from diffusion.agents.helpers import EMA
@@ -20,6 +20,9 @@ import functools
 # from diffusion.SRPO.SRPO import SRPO_IQL
 # from diffusion.SRPO.utils import get_args, marginal_prob_std, set_seed
 from diffusion.SRPO.SRPO import SRPO_IQL
+
+def asymmetric_l2_loss(u, tau):
+    return torch.mean(torch.abs(tau - (u < 0).float()) * u**2)
 
 class Critic(nn.Module):
     def __init__(self, state_dim, action_dim, hidden_dim=256):
@@ -51,6 +54,17 @@ class Critic(nn.Module):
     def q_min(self, state, action):
         q1, q2 = self.forward(state, action)
         return torch.min(q1, q2)
+
+class V_Critic(nn.Module):
+    def __init__(self, state_dim, hidden_dim=256):
+        super(V_Critic, self).__init__()
+        self.v_model = nn.Sequential(nn.Linear(state_dim, hidden_dim),
+                                      nn.Mish(),
+                                      nn.Linear(hidden_dim, hidden_dim),
+                                      nn.Mish(),
+                                      nn.Linear(hidden_dim, 1))
+    def forward(self, state):
+        return self.v_model(state)
 
 class Diffusion_QL(object):
     def __init__(self,
@@ -88,17 +102,13 @@ class Diffusion_QL(object):
         self.ema = EMA(ema_decay)
         self.ema_model = copy.deepcopy(self.actor)
         self.update_ema_every = update_ema_every
-            
-        # import SRPO iql learned critic and avoid training it
-        score_model = SRPO_IQL(
-            input_dim=state_dim + action_dim, output_dim=action_dim, args=args
-        ).to(args.device)
-        score_model.q[0].to(args.device)
-        score_model.q[0].load_state_dict(torch.load(args.critic_path, map_location=args.device))
-        self.critic = score_model.q[0]
-        self.critic.eval()
-        for param in self.critic.parameters():
-            param.requires_grad = False
+        
+        self.critic = Critic(state_dim, action_dim).to(device)
+        self.critic_target = copy.deepcopy(self.critic)
+        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=3e-4)
+        
+        self.v_critic = V_Critic(state_dim).to(device)
+        self.v_critic_optimizer = torch.optim.Adam(self.v_critic.parameters(), lr=3e-4)
 
         if lr_decay:
             self.actor_lr_scheduler = CosineAnnealingLR(self.actor_optimizer, T_max=lr_maxt, eta_min=0.)
@@ -129,8 +139,32 @@ class Diffusion_QL(object):
             reward = reward.to(self.device)
             not_done = not_done.to(self.device)
             
+            """ Update Critic """
+            with torch.no_grad():
+                target_q = self.critic_target.q_min(state, action)  # next action from target actor
+                next_v = self.v_critic(next_state)
+            v = self.v_critic(state)
+            adv = target_q - v
+            v_loss = asymmetric_l2_loss(adv, 0.7)
+            self.v_critic_optimizer.zero_grad()
+            v_loss.backward()
+            self.v_critic_optimizer.step()
+            
+            """Update Critic Q functions"""
+            targets = reward + self.discount * next_v
+            q = self.critic.q_min(state, action)
+            critic_loss = F.mse_loss(q, targets)
+            self.critic_optimizer.zero_grad(set_to_none=True)
+            critic_loss.backward()
+            if self.grad_norm > 0:
+                critic_grad_norms = nn.utils.clip_grad_norm_(self.critic.parameters(), max_norm=self.grad_norm, norm_type=2)
+            self.critic_optimizer.step()
+
+
             """ Policy Training """
-            bc_loss = self.actor.loss(action, state)
+            with torch.no_grad():
+                qs = self.critic_target.q_min(state, action)
+            bc_loss = self.actor.loss(action, state, qs)
             actor_loss = bc_loss
 
             self.actor_optimizer.zero_grad()
@@ -142,6 +176,10 @@ class Diffusion_QL(object):
             """ Step Target network """
             if self.step % self.update_ema_every == 0:
                 self.step_ema()
+            
+            # Update critic target network
+            for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
+                target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
             self.step += 1
 
@@ -151,6 +189,8 @@ class Diffusion_QL(object):
                     log_writer.add_scalar('Actor Grad Norm', actor_grad_norms.max().item(), self.step)
                 log_writer.add_scalar('BC Loss', bc_loss.item(), self.step)
 
+            metric['ql_loss'].append(critic_loss.item())
+            metric['v_loss'].append(v_loss.item())
             metric['actor_loss'].append(actor_loss.item())
             metric['bc_loss'].append(bc_loss.item())
 
@@ -164,7 +204,7 @@ class Diffusion_QL(object):
         state_rpt = torch.repeat_interleave(state, repeats=10, dim=0)
         with torch.no_grad():
             action = self.actor.sample(state_rpt)
-            q_value = self.critic.q0(action / 1e6, state_rpt).flatten()
+            q_value = self.critic.q_min(state_rpt, action / 1e6).flatten()
             q_value = torch.clamp(q_value, min=0)
             idx = torch.multinomial(F.softmax(q_value), 1)
         return action[idx].cpu().data.numpy().flatten()
