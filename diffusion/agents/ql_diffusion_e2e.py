@@ -145,7 +145,7 @@ class Diffusion_QL(object):
             """Update Critic Q functions"""
             targets = reward + self.discount * next_v
             q1, q2 = self.critic(state, action)
-            critic_loss = sum(F.mse_loss(q1, targets) + F.mse_loss(q2, targets)) / 2.0
+            critic_loss = F.mse_loss(q1, targets) + F.mse_loss(q2, targets)
             self.critic_optimizer.zero_grad(set_to_none=True)
             critic_loss.backward()
             if self.grad_norm > 0:
