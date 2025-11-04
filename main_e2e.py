@@ -43,8 +43,8 @@ hyperparameters = {
 # hyperparameters from v14_iql.py
 TensorBatch = List[torch.Tensor]
 # evaluation_dataset_path = '/home/czy/Schaferct/ALLdatasets/emulate'
-evaluation_dataset_path = '/home/min414/data1/Schaferct/ALLdatasets/1'
-# evaluation_dataset_path = '/home/czy/offlineRL-rtc-bwp-2/rtc_srpo/ALLdatasets'
+evaluation_dataset_path = '/home/min414/data1/Schaferct/ALLdatasets/1' # MIN414
+# evaluation_dataset_path = '/home/czy/offlineRL-rtc-bwp-2/rtc_srpo/ALLdatasets' # 186
 ENUM = 20  # every 5 evaluation set
 # 拿出ENUM个测试集？
 small_evaluation_datasets = []
@@ -233,8 +233,8 @@ class TrainConfig:
     checkpoints_path: Optional[str] = './checkpoints_diffusionql'  # Save path
     load_model: str = ""  # Model load file name, "" doesn't load
     # IQL 的参数，部分可以用作 Diffusion QL 的参数
-    # buffer_size: int = 6_538_000  # Replay buffer size
-    buffer_size: int = 20_000_000  # Replay buffer size
+    buffer_size: int = 6_538_000  # Replay buffer size
+    # buffer_size: int = 20_000_000  # Replay buffer size
     # buffer_size: int = 8711389  # Replay buffer size
     batch_size: int = 2048  # Batch size for all networks
     discount: float = 0.99  # Discount factor
@@ -396,9 +396,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset_path",
         # default = "/home/czy/Schaferct/mstrain-id-123.pickle",
-        default="/home/min414/data1/Schaferct/training_dataset_pickle/v8.pickle",
+        default="/home/min414/data1/Schaferct/training_dataset_pickle/v8.pickle", # MIN414
         # default="/home/czy/Schaferct/mstrain-id-345.pickle",
-        # default='/home/czy/Schaferct/v8.pickle',
+        # default='/home/czy/Schaferct/v8.pickle', # 186
     )
     parser.add_argument(
         "--add_data_path",
