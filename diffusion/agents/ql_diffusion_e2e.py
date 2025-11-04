@@ -10,16 +10,8 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from diffusion.utils.logger import logger
 
 from diffusion.agents.diffusion_id_e2e import Diffusion
-from diffusion.agents.model import MLP
-from diffusion.agents.model import MLP_GRU, Meta_MLP_GRU, Meta_MLP_GRU_v1, Meta_MLP_GRU_select_feature
+from diffusion.agents.model import MLP_GRU
 from diffusion.agents.helpers import EMA
-
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
-
-import functools
-# from diffusion.SRPO.SRPO import SRPO_IQL
-# from diffusion.SRPO.utils import get_args, marginal_prob_std, set_seed
-from diffusion.SRPO.SRPO import SRPO_IQL
 
 def asymmetric_l2_loss(u, tau):
     return torch.mean(torch.abs(tau - (u < 0).float()) * u**2)
@@ -88,7 +80,7 @@ class Diffusion_QL(object):
                  args=None,
                  ):
 
-        self.model = Meta_MLP_GRU(state_dim=state_dim, action_dim=action_dim, z_dim=256, device=device)
+        self.model = MLP_GRU(state_dim=state_dim, action_dim=action_dim, device=device)
 
         self.actor = Diffusion(state_dim=state_dim, action_dim=action_dim, model=self.model, max_action=max_action,
                                beta_schedule=beta_schedule, n_timesteps=n_timesteps, eta=eta, args=args,).to(device)
@@ -146,14 +138,14 @@ class Diffusion_QL(object):
             v = self.v_critic(state)
             adv = target_q - v
             v_loss = asymmetric_l2_loss(adv, 0.7)
-            self.v_critic_optimizer.zero_grad()
+            self.v_critic_optimizer.zero_grad(set_to_none=True)
             v_loss.backward()
             self.v_critic_optimizer.step()
             
             """Update Critic Q functions"""
             targets = reward + self.discount * next_v
-            q = self.critic.q_min(state, action)
-            critic_loss = F.mse_loss(q, targets)
+            q1, q2 = self.critic(state, action)
+            critic_loss = sum(F.mse_loss(q1, targets) + F.mse_loss(q2, targets)) / 2.0
             self.critic_optimizer.zero_grad(set_to_none=True)
             critic_loss.backward()
             if self.grad_norm > 0:
@@ -187,7 +179,11 @@ class Diffusion_QL(object):
             if log_writer is not None:
                 if self.grad_norm > 0:
                     log_writer.add_scalar('Actor Grad Norm', actor_grad_norms.max().item(), self.step)
+                    log_writer.add_scalar('Critic Grad Norm', critic_grad_norms.max().item(), self.step)
                 log_writer.add_scalar('BC Loss', bc_loss.item(), self.step)
+                log_writer.add_scalar('QL Loss', critic_loss.item(), self.step)
+                log_writer.add_scalar('V Loss', v_loss.item(), self.step)
+                log_writer.add_scalar('Actor Loss', actor_loss.item(), self.step)
 
             metric['ql_loss'].append(critic_loss.item())
             metric['v_loss'].append(v_loss.item())

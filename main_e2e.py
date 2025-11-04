@@ -43,8 +43,8 @@ hyperparameters = {
 # hyperparameters from v14_iql.py
 TensorBatch = List[torch.Tensor]
 # evaluation_dataset_path = '/home/czy/Schaferct/ALLdatasets/emulate'
-# evaluation_dataset_path = '/home/min414/data1/Schaferct/ALLdatasets/1'
-evaluation_dataset_path = '/home/czy/offlineRL-rtc-bwp-2/rtc_srpo/ALLdatasets'
+evaluation_dataset_path = '/home/min414/data1/Schaferct/ALLdatasets/1'
+# evaluation_dataset_path = '/home/czy/offlineRL-rtc-bwp-2/rtc_srpo/ALLdatasets'
 ENUM = 20  # every 5 evaluation set
 # 拿出ENUM个测试集？
 small_evaluation_datasets = []
@@ -396,9 +396,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset_path",
         # default = "/home/czy/Schaferct/mstrain-id-123.pickle",
-        # default="/home/min414/data1/Schaferct/training_dataset_pickle/v8.pickle",
+        default="/home/min414/data1/Schaferct/training_dataset_pickle/v8.pickle",
         # default="/home/czy/Schaferct/mstrain-id-345.pickle",
-        default='/home/czy/Schaferct/v8.pickle',
+        # default='/home/czy/Schaferct/v8.pickle',
     )
     parser.add_argument(
         "--add_data_path",
@@ -408,7 +408,8 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--eval_data_path",
-        default="/home/czy/Schaferct/ALLdatasets/emulate",
+        # default="/home/czy/Schaferct/ALLdatasets/emulate",
+        default=None,
     )
     parser.add_argument(
         "--ckpt_path",
@@ -416,7 +417,8 @@ if __name__ == "__main__":
     ) 
     parser.add_argument(
         "--critic_path",
-        default="/home/czy/meta/Meta_diffusion_QL/diffusion/SRPO/critic_ckpt120000.pth",
+        # default="/home/czy/meta/Meta_diffusion_QL/diffusion/SRPO/critic_ckpt120000.pth",
+        default=None,
     )
     # Sets Gym, PyTorch and Numpy seeds eval_interval
     parser.add_argument("--eval_num", default=8, type=int)
@@ -575,6 +577,8 @@ if __name__ == "__main__":
         logger.record_tabular('Trained Epochs', curr_epoch)
         logger.record_tabular('BC Loss', np.mean(loss_metric['bc_loss']))
         logger.record_tabular('Actor Loss', np.mean(loss_metric['actor_loss']))
+        logger.record_tabular('V Loss', np.mean(loss_metric['v_loss']))
+        logger.record_tabular('QL Loss', np.mean(loss_metric['ql_loss']))
         logger.dump_tabular()
 
         # Evaluate episode
