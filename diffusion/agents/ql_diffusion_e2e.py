@@ -120,7 +120,7 @@ class Diffusion_QL(object):
         self.ema.update_model_average(self.ema_model, self.actor)
 
     def train(self, replay_buffer, iterations, batch_size=100, log_writer=None):
-        metric = {'bc_loss': [], 'ql_loss': [], 'actor_loss': []}
+        metric = {'bc_loss': [], 'ql_loss': [], 'actor_loss': [], 'v_loss': []}
         for _ in range(iterations):
             # Sample replay buffer / batch
             # action (Mbps)
