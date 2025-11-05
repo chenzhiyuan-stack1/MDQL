@@ -125,7 +125,7 @@ def evaluate_RtcBwp(policy_fn, eval_dataset: list, device: str):
         observations = np.asarray(call_data["observations"], dtype=np.float32)
         true_capacity = np.asarray(call_data["true_capacities"], dtype=np.float32)
         next_observations = np.asarray(call_data["next_observations"], dtype=np.float32)
-        actions = np.asarray(call_data["bandwidth_predictions"], dtype=np.float32)
+        actions = np.asarray(call_data["actions"], dtype=np.float32)
         rewards = np.asarray(call_data["rewards"], dtype=np.float32)
         
         model_predictions = []
@@ -133,7 +133,7 @@ def evaluate_RtcBwp(policy_fn, eval_dataset: list, device: str):
             obss = observations[t : t + 1, :].reshape(-1)
             obss_ = obss * normal_vector
             obss_ = torch.tensor(obss_.reshape(1, -1), device=device, dtype=torch.float32)
-            action = actions[t:t+1].reshape(-1)
+            action = actions[t:t+1, :].reshape(-1)
             action = action / 1e6
             action_tensor = torch.tensor(action.reshape(1, -1), dtype=torch.float32).to(device)
             reward = rewards[t:t+1].reshape(-1)
