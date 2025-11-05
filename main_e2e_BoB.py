@@ -123,7 +123,7 @@ def evaluate_RtcBwp(policy_fn, eval_dataset: list, device: str):
 
         normal_vector = NORMAL_VECTOR
         observations = np.asarray(call_data["observations"], dtype=np.float32)
-        true_capacity = np.asarray(call_data["true_capacity"], dtype=np.float32)
+        true_capacity = np.asarray(call_data["true_capacities"], dtype=np.float32)
         next_observations = np.asarray(call_data["next_observations"], dtype=np.float32)
         actions = np.asarray(call_data["bandwidth_predictions"], dtype=np.float32)
         rewards = np.asarray(call_data["rewards"], dtype=np.float32)
