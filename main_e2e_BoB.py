@@ -44,7 +44,7 @@ hyperparameters = {
 }
 
 # 测试集
-small_evaluation_datasets = ['/home/min414/data2/extra_storage/BoB_3.pickle']
+small_evaluation_datasets = ['BoB_3.pickle']
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 USE_WANDB = 1
@@ -215,7 +215,7 @@ if __name__ == "__main__":
         # default="/home/min414/data1/Schaferct/training_dataset_pickle/v8.pickle", # MIN414
         # default="/home/czy/Schaferct/mstrain-id-345.pickle",
         # default='/home/czy/Schaferct/v8.pickle', # 186
-        default='/home/min414/data2/extra_storage/BoB_012.pickle',
+        default='BoB_012.pickle',
     )
     parser.add_argument(
         "--add_data_path",
