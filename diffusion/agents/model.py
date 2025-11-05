@@ -140,6 +140,99 @@ class MLP_GRU(nn.Module):
 
         return self.final_layer(x)
 
+class MLP_GRU_v2(nn.Module):
+    """
+    优化后的MLP_GRU结构，能正确处理时序状态。
+    - state首先被reshape为 (batch_size, seq_len, features_per_step)
+    - GRU用于编码这个序列，提取时序上下文
+    - 将时序上下文与其他信息融合，用于去噪
+    """
+    def __init__(self,
+                 action_dim,
+                 device,
+                 state_feature_dim=11, # 每个时间步的特征维度
+                 state_seq_len=6,      # 状态序列的长度
+                 hidden_dim=256,
+                 t_dim=16):
+
+        super(MLP_GRU_v2, self).__init__()
+        self.device = device
+        self.state_seq_len = state_seq_len
+        self.state_feature_dim = state_feature_dim
+
+        # 时间编码 MLP
+        self.time_mlp = nn.Sequential(
+            SinusoidalPosEmb(t_dim),
+            nn.Linear(t_dim, t_dim * 2),
+            nn.Mish(),
+            nn.Linear(t_dim * 2, t_dim),
+        )
+        
+        # 状态编码器：首先将每个时间步的11维特征映射到高维空间
+        self.state_encoder = nn.Sequential(
+            nn.Linear(state_feature_dim, hidden_dim),
+            nn.ReLU()
+        )
+        
+        # GRU层，用于处理序列数据
+        # batch_first=True 让输入张量的形状为 (batch, seq, feature)
+        self.gru = nn.GRU(hidden_dim, hidden_dim, num_layers=2, batch_first=True)
+        
+        # 将GRU的输出（最后一个时间步的隐藏状态）进一步处理
+        self.state_feature_extractor = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.Mish(),
+            nn.Linear(hidden_dim, hidden_dim // 2) # 压缩特征维度
+        )
+        
+        # 融合层：融合 action, time_embedding, state_embedding
+        input_dim = action_dim + t_dim + (hidden_dim // 2)
+        self.mid_layer = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim * 2),
+            nn.Mish(),
+            nn.Linear(hidden_dim * 2, hidden_dim),
+            nn.Mish(),
+        )
+        
+        # 最终输出层
+        self.final_layer = nn.Linear(hidden_dim, action_dim)
+
+    def forward(self, x, time, state):
+        # x: (batch_size, action_dim) - 噪声化的action
+        # time: (batch_size, )
+        # state: (batch_size, 66)
+
+        # 1. 编码时间 t
+        t = self.time_mlp(time)
+
+        # 2. 正确处理时序状态 state
+        # 将 (batch_size, 66) 重塑为 (batch_size, 6, 11)
+        state_reshaped = state.view(-1, self.state_seq_len, self.state_feature_dim)
+        
+        # 将每个时间步的特征编码到高维
+        # 输入: (batch * seq_len, feature_dim) -> 输出: (batch * seq_len, hidden_dim)
+        encoded_state_steps = self.state_encoder(state_reshaped.view(-1, self.state_feature_dim))
+        # 恢复序列形状
+        encoded_state_seq = encoded_state_steps.view(-1, self.state_seq_len, encoded_state_seq.shape[-1])
+
+        # GRU处理序列，h_n是最后一个时间步的隐藏状态
+        # output: (batch, seq_len, hidden_dim), h_n: (num_layers, batch, hidden_dim)
+        _, h_n = self.gru(encoded_state_seq)
+        
+        # 我们使用最后一层的隐藏状态作为整个序列的编码
+        # h_n[-1] 的形状是 (batch, hidden_dim)
+        state_embedding = self.state_feature_extractor(h_n[-1])
+
+        # 3. 融合特征并预测噪声
+        # 拼接 [噪声action, 时间编码, 状态序列编码]
+        combined_features = torch.cat([x, t, state_embedding], dim=1)
+        
+        # 通过中间层
+        mid_features = self.mid_layer(combined_features)
+
+        # 输出最终结果
+        return self.final_layer(mid_features)
+
 class Meta_MLP_GRU(nn.Module):
     """
     MLP Model

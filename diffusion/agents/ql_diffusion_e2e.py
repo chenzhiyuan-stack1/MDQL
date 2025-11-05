@@ -10,7 +10,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from diffusion.utils.logger import logger
 
 from diffusion.agents.diffusion_id_e2e import Diffusion
-from diffusion.agents.model import MLP_GRU
+from diffusion.agents.model import MLP_GRU_v2
 from diffusion.agents.helpers import EMA
 
 def asymmetric_l2_loss(u, tau):
@@ -80,7 +80,7 @@ class Diffusion_QL(object):
                  args=None,
                  ):
 
-        self.model = MLP_GRU(state_dim=state_dim, action_dim=action_dim, device=device)
+        self.model = MLP_GRU_v2(state_dim=state_dim, action_dim=action_dim, device=device)
 
         self.actor = Diffusion(state_dim=state_dim, action_dim=action_dim, model=self.model, max_action=max_action,
                                beta_schedule=beta_schedule, n_timesteps=n_timesteps, eta=eta, args=args,).to(device)
@@ -209,11 +209,20 @@ class Diffusion_QL(object):
     def save_model(self, dir, id=None):
         if id is not None:
             torch.save(self.actor.state_dict(), f'{dir}/actor_{id}.pth')
+            torch.save(self.critic.state_dict(), f'{dir}/critic_{id}.pth')
+            torch.save(self.v_critic.state_dict(), f'{dir}/v_critic_{id}.pth')
         else:
             torch.save(self.actor.state_dict(), f'{dir}/actor.pth')
+            torch.save(self.critic.state_dict(), f'{dir}/critic.pth')
+            torch.save(self.v_critic.state_dict(), f'{dir}/v_critic.pth')
 
     def load_model(self, dir, id=None):
         if id is not None:
             self.actor.load_state_dict(torch.load(f'{dir}/actor_{id}.pth'))
+            self.critic.load_state_dict(torch.load(f'{dir}/critic_{id}.pth'))
+            self.v_critic.load_state_dict(torch.load(f'{dir}/v_critic_{id}.pth'))
         else:
             self.actor.load_state_dict(torch.load(f'{dir}/actor.pth'))
+            self.critic.load_state_dict(torch.load(f'{dir}/critic.pth'))
+            self.v_critic.load_state_dict(torch.load(f'{dir}/v_critic.pth'))
+        self.critic_target = copy.deepcopy(self.critic)
