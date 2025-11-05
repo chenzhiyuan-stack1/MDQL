@@ -36,191 +36,29 @@ import pdb
 import onnxruntime as ort
 import sys
 
+from norm_vector_BoB import NORMAL_VECTOR
+
 hyperparameters = {
     'test':     {'lr': 1e-5, 'eta': 10.0,  'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 10, 'num_epochs': 4000, 'gn': 10.0, 'top_k': 1},
+    'BoB':      {'lr': 1e-5, 'eta': 10.0,  'max_q_backup': False,  'reward_tune': 'no',          'eval_freq': 10, 'num_epochs': 4000, 'gn': 10.0, 'top_k': 1},
 }
 
-# hyperparameters from v14_iql.py
-TensorBatch = List[torch.Tensor]
-# evaluation_dataset_path = '/home/czy/Schaferct/ALLdatasets/emulate'
-evaluation_dataset_path = '/home/min414/data1/Schaferct/ALLdatasets/1' # MIN414
-# evaluation_dataset_path = '/home/czy/offlineRL-rtc-bwp-2/rtc_srpo/ALLdatasets' # 186
-ENUM = 20  # every 5 evaluation set
-# 拿出ENUM个测试集？
-small_evaluation_datasets = []
-policy_dir_names = os.listdir(evaluation_dataset_path)
-for p_t in policy_dir_names[:ENUM]:
-    policy_type_dir = os.path.join(evaluation_dataset_path, p_t)
-    for e_f_name in os.listdir(policy_type_dir)[:ENUM]:
-        e_f_path = os.path.join(policy_type_dir, e_f_name)
-        small_evaluation_datasets.append(e_f_path)
+# 测试集
+small_evaluation_datasets = ['/home/min414/data2/extra_storage/BoB_3.pickle']
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 USE_WANDB = 1
 b_in_Mb = 1e6
 
 MAX_ACTION = 20  # Mbps
-STATE_DIM = 150
+STATE_DIM = 66
 ACTION_DIM = 1
 
 EXP_ADV_MAX = 100.0
 LOG_STD_MIN = -20.0
 LOG_STD_MAX = 2.0
 
-NORMAL_VECTOR = np.array(
-        [
-            1e-6,
-            1e-6,
-            1e-6,
-            1e-6,
-            1e-6,
-            1e-6,
-            1e-6,
-            1e-6,
-            1e-6,
-            1e-6,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-2,
-            1e-2,
-            1e-2,
-            1e-2,
-            1e-2,
-            1e-4,
-            1e-4,
-            1e-4,
-            1e-4,
-            1e-4,
-            1e-5,
-            1e-5,
-            1e-5,
-            1e-5,
-            1e-5,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-2,
-            1e-2,
-            1e-2,
-            1e-2,
-            1e-2,
-            1e-2,
-            1e-2,
-            1e-2,
-            1e-2,
-            1e-2,
-            1e-2,
-            1e-2,
-            1e-2,
-            1e-2,
-            1e-2,
-            1e-2,
-            1e-2,
-            1e-2,
-            1e-2,
-            1e-2,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1e-1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-            1,
-        ]
-)
+
 
 @dataclass
 class TrainConfig:
@@ -233,9 +71,9 @@ class TrainConfig:
     checkpoints_path: Optional[str] = './checkpoints_diffusionql'  # Save path
     load_model: str = ""  # Model load file name, "" doesn't load
     # IQL 的参数，部分可以用作 Diffusion QL 的参数
-    buffer_size: int = 6_538_000  # Replay buffer size
+    # buffer_size: int = 6_538_000  # Replay buffer size
     # buffer_size: int = 20_000_000  # Replay buffer size
-    # buffer_size: int = 8711389  # Replay buffer size
+    buffer_size: int = 2_000_000  # Replay buffer size
     batch_size: int = 2048  # Batch size for all networks
     discount: float = 0.99  # Discount factor
     tau: float = 0.005  # Target network update rate
@@ -280,37 +118,15 @@ def evaluate_RtcBwp(policy_fn, eval_dataset: list, device: str):
     every_call_accuracy = []
     every_call_over = []
     for f_path in tqdm(eval_dataset, desc="Evaluating"):
-        with open(f_path, "r") as file:
-            call_data = json.load(file)
+        with open(f_path, 'rb') as f:
+            call_data = pickle.load(f)
 
-        observations = np.asarray(call_data["observations"], dtype=np.float32)
         normal_vector = NORMAL_VECTOR
+        observations = np.asarray(call_data["observations"], dtype=np.float32)
         true_capacity = np.asarray(call_data["true_capacity"], dtype=np.float32)
-
+        next_observations = np.asarray(call_data["next_observations"], dtype=np.float32)
         actions = np.asarray(call_data["bandwidth_predictions"], dtype=np.float32)
-        
-        quality_videos = np.asarray(call_data["video_quality"], dtype=np.float32)
-        quality_audios = np.asarray(call_data["audio_quality"], dtype=np.float32)
-        avg_q_v = np.nanmean(quality_videos)
-        avg_q_a = np.nanmean(quality_audios)
-        rewards = []
-        next_observations = []
-        for idx in range(observations.shape[0]):
-            r_v = quality_videos[idx]
-            r_a = quality_audios[idx]
-            if math.isnan(quality_videos[idx]):
-                r_v = avg_q_v
-            if math.isnan(quality_audios[idx]):
-                r_a = avg_q_a
-            rewards.append(r_v * 1.8 + r_a * 0.2)
-
-            if idx + 1 >= observations.shape[0]:
-                next_observations.append([-1] * 150)  # s_terminal
-            else:
-                next_observations.append(observations[idx + 1])
-                
-        rewards = np.asarray(rewards, dtype=np.float32)
-        next_observations = np.asarray(next_observations, dtype=np.float32)
+        rewards = np.asarray(call_data["rewards"], dtype=np.float32)
         
         model_predictions = []
         for t in range(observations.shape[0]):
@@ -396,9 +212,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset_path",
         # default = "/home/czy/Schaferct/mstrain-id-123.pickle",
-        default="/home/min414/data1/Schaferct/training_dataset_pickle/v8.pickle", # MIN414
+        # default="/home/min414/data1/Schaferct/training_dataset_pickle/v8.pickle", # MIN414
         # default="/home/czy/Schaferct/mstrain-id-345.pickle",
         # default='/home/czy/Schaferct/v8.pickle', # 186
+        default='/home/min414/data2/extra_storage/BoB_012.pickle',
     )
     parser.add_argument(
         "--add_data_path",
@@ -428,8 +245,9 @@ if __name__ == "__main__":
     parser.add_argument("--save_model", default=1, type=int)
     parser.add_argument("--obs_dim", default=150, type=int)
     parser.add_argument("--action_dim", default=1, type=int)
-    parser.add_argument("--buffer_size", default=6_538_000, type=int)
+    # parser.add_argument("--buffer_size", default=6_538_000, type=int)
     # parser.add_argument("--buffer_size", default=20_000_000, type=int)
+    parser.add_argument("--buffer_size", default=2_000_000, type=int)
     # parser.add_argument("--batch_size", default=2048, type=int)
     parser.add_argument("--debug", type=int, default=0.05)
     parser.add_argument("--beta", type=float, default=None)
