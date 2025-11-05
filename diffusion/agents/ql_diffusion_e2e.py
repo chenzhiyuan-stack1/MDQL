@@ -146,7 +146,25 @@ class Diffusion_QL(object):
             """Update Critic Q functions"""
             targets = reward + self.discount * next_v
             q1, q2 = self.critic(state, action)
-            critic_loss = F.mse_loss(q1, targets) + F.mse_loss(q2, targets)
+            
+            # --- 新增梯度惩罚 ---
+            # 复制状态张量并使其需要梯度
+            state_rp = state.detach().clone().requires_grad_(True)
+            action_rp = action.detach().clone().requires_grad_(True)
+            q1_rp, q2_rp = self.critic(state_rp, action_rp)
+            q_rp = torch.mean(q1_rp + q2_rp) # 或者 torch.min(q1_rp, q2_rp)
+            
+            # 计算梯度
+            grad_q = torch.autograd.grad(outputs=q_rp, inputs=[state_rp, action_rp], 
+                                         grad_outputs=torch.ones_like(q_rp), 
+                                         create_graph=True, retain_graph=True)[0]
+            
+            # 计算梯度惩罚项
+            grad_penalty = torch.mean(grad_q.pow(2))
+            
+            # 将梯度惩罚加入到loss中
+            critic_loss = F.mse_loss(q1, targets) + F.mse_loss(q2, targets) + 0.01 * grad_penalty # 0.01是超参，可以调整
+
             self.critic_optimizer.zero_grad(set_to_none=True)
             critic_loss.backward()
             if self.grad_norm > 0:
