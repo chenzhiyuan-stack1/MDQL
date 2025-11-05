@@ -117,7 +117,7 @@ def evaluate_RtcBwp(policy_fn, eval_dataset: list, device: str):
     every_call_mse = []
     every_call_accuracy = []
     every_call_over = []
-    for f_path in tqdm(eval_dataset, desc="Evaluating"):
+    for f_path in tqdm(eval_dataset, desc="Overall Evaluation Progress", position=0):
         with open(f_path, 'rb') as f:
             call_data = pickle.load(f)
 
@@ -129,7 +129,8 @@ def evaluate_RtcBwp(policy_fn, eval_dataset: list, device: str):
         rewards = np.asarray(call_data["rewards"], dtype=np.float32)
         
         model_predictions = []
-        for t in range(observations.shape[0]):
+        # 为内部循环添加tqdm，leave=False使其完成后消失，避免刷屏
+        for t in tqdm(range(observations.shape[0]), desc=f"Processing {os.path.basename(f_path)}", position=1, leave=False):
             obss = observations[t : t + 1, :].reshape(-1)
             obss_ = obss * normal_vector
             obss_ = torch.tensor(obss_.reshape(1, -1), device=device, dtype=torch.float32)
